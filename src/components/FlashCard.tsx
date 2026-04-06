@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import type { AudioSource, Mode, PhraseCard } from "../types";
 import { playPhrase } from "../audio";
+import {
+  fetchLikelyResponses,
+  type LikelyResponse,
+} from "../openaiResponses";
 
 interface Props {
   card: PhraseCard;
@@ -12,6 +16,13 @@ interface Props {
   onGrade: (correct: boolean) => void;
 }
 
+type ResponseState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; responses: LikelyResponse[] }
+  | { kind: "error"; message: string }
+  | { kind: "no-key" };
+
 export function FlashCard({
   card,
   mode,
@@ -22,10 +33,18 @@ export function FlashCard({
   onGrade,
 }: Props) {
   const [revealed, setRevealed] = useState(false);
+  const [responseState, setResponseState] = useState<ResponseState>({
+    kind: "idle",
+  });
+  const [revealedTranslations, setRevealedTranslations] = useState<Set<number>>(
+    new Set()
+  );
 
-  // Reset reveal whenever card changes.
+  // Reset everything whenever card changes.
   useEffect(() => {
     setRevealed(false);
+    setResponseState({ kind: "idle" });
+    setRevealedTranslations(new Set());
   }, [card.id, mode]);
 
   const playOptions = {
@@ -36,7 +55,6 @@ export function FlashCard({
   };
 
   // In Hear mode, attempt to auto-play when a new card appears.
-  // (May be blocked on first card without a prior gesture.)
   useEffect(() => {
     if (mode === "hear" && !revealed) {
       playPhrase(card.id, card.japanese, playOptions).catch(() => {});
@@ -53,10 +71,51 @@ export function FlashCard({
     openaiKey,
   ]);
 
+  // After reveal on a Say card, fetch likely responses.
+  useEffect(() => {
+    if (!revealed || mode !== "say") return;
+    if (!openaiKey) {
+      setResponseState({ kind: "no-key" });
+      return;
+    }
+    let cancelled = false;
+    setResponseState({ kind: "loading" });
+    fetchLikelyResponses(card.id, card.english, card.japanese, openaiKey)
+      .then((responses) => {
+        if (!cancelled) setResponseState({ kind: "ready", responses });
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setResponseState({
+            kind: "error",
+            message: err?.message ?? "Failed to load responses",
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [revealed, mode, card.id, card.english, card.japanese, openaiKey]);
+
   const play = () => playPhrase(card.id, card.japanese, playOptions);
 
-  // Romaji is hidden by default in Hear mode (you want sound → meaning,
-  // not sound → romaji → meaning).
+  const playResponse = (index: number, japanese: string) => {
+    // Synthetic id so the audio cache stores each response separately.
+    playPhrase(`${card.id}-resp-${index}`, japanese, {
+      ...playOptions,
+      noFile: true,
+    });
+  };
+
+  const toggleTranslation = (index: number) => {
+    setRevealedTranslations((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  // Romaji is hidden by default in Hear mode.
   const showRomajiHere = showRomaji && mode !== "hear";
 
   return (
@@ -133,6 +192,72 @@ export function FlashCard({
           </>
         )}
       </div>
+
+      {/* Likely responses (Say mode only, after reveal) */}
+      {revealed && mode === "say" && (
+        <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+          <p className="text-xs uppercase tracking-wide text-slate-400 mb-2">
+            Likely responses
+          </p>
+          {responseState.kind === "loading" && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Generating…
+            </p>
+          )}
+          {responseState.kind === "no-key" && (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Set your OpenAI key in Settings to see likely responses.
+            </p>
+          )}
+          {responseState.kind === "error" && (
+            <p className="text-sm text-rose-500">
+              Couldn't load responses: {responseState.message}
+            </p>
+          )}
+          {responseState.kind === "ready" && (
+            <ul className="space-y-2">
+              {responseState.responses.map((r, i) => {
+                const shown = revealedTranslations.has(i);
+                return (
+                  <li
+                    key={i}
+                    className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3"
+                  >
+                    <div className="flex items-start gap-2">
+                      <p className="jp text-lg flex-1 leading-snug">
+                        {r.japanese}
+                      </p>
+                      <button
+                        onClick={() => playResponse(i, r.japanese)}
+                        className="text-slate-500 dark:text-slate-400 px-2"
+                        aria-label="Play response"
+                      >
+                        🔊
+                      </button>
+                      <button
+                        onClick={() => toggleTranslation(i)}
+                        className="text-xs px-2 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                      >
+                        {shown ? "Hide" : "EN"}
+                      </button>
+                    </div>
+                    {shown && (
+                      <div className="mt-2 text-sm space-y-0.5">
+                        <p className="text-slate-500 dark:text-slate-400 italic">
+                          {r.romaji}
+                        </p>
+                        <p className="text-slate-700 dark:text-slate-200">
+                          {r.english}
+                        </p>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="mt-4">
         {!revealed ? (

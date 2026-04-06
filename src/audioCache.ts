@@ -1,9 +1,10 @@
-// IndexedDB-backed cache for OpenAI TTS audio blobs.
-// Cache key includes a hash of the Japanese text so that edits invalidate.
+// IndexedDB-backed cache for OpenAI TTS audio blobs and chat responses.
+// Cache keys include a hash of the Japanese text so that edits invalidate.
 
 const DB_NAME = "jp-audio-cache";
 const STORE = "openai-tts";
-const VERSION = 1;
+const RESPONSES_STORE = "openai-responses";
+const VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -15,6 +16,9 @@ function openDB(): Promise<IDBDatabase> {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE);
+      }
+      if (!db.objectStoreNames.contains(RESPONSES_STORE)) {
+        db.createObjectStore(RESPONSES_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -55,8 +59,40 @@ export async function clearAudioCache(): Promise<void> {
   try {
     const db = await openDB();
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
+      const tx = db.transaction([STORE, RESPONSES_STORE], "readwrite");
       tx.objectStore(STORE).clear();
+      tx.objectStore(RESPONSES_STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+export async function getCachedResponses<T>(key: string): Promise<T | null> {
+  try {
+    const db = await openDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(RESPONSES_STORE, "readonly");
+      const req = tx.objectStore(RESPONSES_STORE).get(key);
+      req.onsuccess = () => resolve((req.result as T | undefined) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function putCachedResponses<T>(
+  key: string,
+  value: T
+): Promise<void> {
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(RESPONSES_STORE, "readwrite");
+      tx.objectStore(RESPONSES_STORE).put(value, key);
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
