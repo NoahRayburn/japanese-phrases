@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Mode, PhraseCard } from "../types";
+import type { AudioSource, Mode, PhraseCard } from "../types";
 import { playPhrase } from "../audio";
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   mode: Mode;
   speechRate: number;
   showRomaji: boolean;
+  audioSource: AudioSource;
+  openaiKey?: string;
   onGrade: (correct: boolean) => void;
 }
 
@@ -15,6 +17,8 @@ export function FlashCard({
   mode,
   speechRate,
   showRomaji,
+  audioSource,
+  openaiKey,
   onGrade,
 }: Props) {
   const [revealed, setRevealed] = useState(false);
@@ -24,15 +28,32 @@ export function FlashCard({
     setRevealed(false);
   }, [card.id, mode]);
 
+  const playOptions = {
+    rate: speechRate,
+    noFile: card.noFile,
+    source: audioSource,
+    openaiKey,
+  };
+
   // In Hear mode, attempt to auto-play when a new card appears.
   // (May be blocked on first card without a prior gesture.)
   useEffect(() => {
     if (mode === "hear" && !revealed) {
-      playPhrase(card.id, card.japanese, speechRate, card.noFile).catch(() => {});
+      playPhrase(card.id, card.japanese, playOptions).catch(() => {});
     }
-  }, [card.id, mode, revealed, speechRate, card.japanese, card.noFile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    card.id,
+    mode,
+    revealed,
+    speechRate,
+    card.japanese,
+    card.noFile,
+    audioSource,
+    openaiKey,
+  ]);
 
-  const play = () => playPhrase(card.id, card.japanese, speechRate, card.noFile);
+  const play = () => playPhrase(card.id, card.japanese, playOptions);
 
   // Romaji is hidden by default in Hear mode (you want sound → meaning,
   // not sound → romaji → meaning).

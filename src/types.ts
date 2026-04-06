@@ -25,10 +25,14 @@ export interface ReviewRecord {
   history: ReviewEntry[];
 }
 
+export type AudioSource = "local" | "openai";
+
 export interface AppSettings {
   showRomajiByDefault: boolean;
   speechRate: number;
   tripDate: string; // YYYY-MM-DD, local
+  audioSource: AudioSource;
+  openaiApiKey?: string; // never synced — per-device only
 }
 
 export interface AppState {

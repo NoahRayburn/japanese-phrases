@@ -9,6 +9,7 @@ const DEFAULT_STATE: AppState = {
     showRomajiByDefault: true,
     speechRate: 0.85,
     tripDate: "2026-04-27",
+    audioSource: "local",
   },
   phrases: seedPhrases,
 };

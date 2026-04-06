@@ -119,6 +119,8 @@ export function StudyView({ mode, state, onGrade }: Props) {
         mode={mode}
         speechRate={state.settings.speechRate}
         showRomaji={state.settings.showRomajiByDefault}
+        audioSource={state.settings.audioSource}
+        openaiKey={state.settings.openaiApiKey}
         onGrade={handleGrade}
       />
       <p className="text-center text-xs text-slate-500 dark:text-slate-400">
