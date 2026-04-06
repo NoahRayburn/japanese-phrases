@@ -7,7 +7,13 @@
 //   - Kyoko voice installed (System Settings → Accessibility → Spoken Content
 //     → System Voice → Manage Voices → Japanese → Kyoko)
 
-import { readFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  unlinkSync,
+} from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,7 +66,19 @@ for (const card of phrases) {
   }
 }
 
+// Delete orphans — files for ids no longer in phrases.json.
+const validIds = new Set(phrases.map((p) => p.id));
+let orphaned = 0;
+for (const file of readdirSync(outDir)) {
+  if (!file.endsWith(".m4a")) continue;
+  const id = file.slice(0, -".m4a".length);
+  if (!validIds.has(id)) {
+    unlinkSync(join(outDir, file));
+    orphaned++;
+  }
+}
+
 console.log(
-  `\nDone. Generated: ${generated}, skipped (already existed): ${skipped}, failed: ${failed}`
+  `\nDone. Generated: ${generated}, skipped (already existed): ${skipped}, orphans removed: ${orphaned}, failed: ${failed}`
 );
 if (failed > 0) process.exit(1);
