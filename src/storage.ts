@@ -12,6 +12,7 @@ const DEFAULT_STATE: AppState = {
     audioSource: "local",
   },
   phrases: seedPhrases,
+  phrasesUpdatedAt: 0,
 };
 
 export function loadState(): AppState {
@@ -26,6 +27,7 @@ export function loadState(): AppState {
         parsed.phrases && parsed.phrases.length > 0
           ? parsed.phrases
           : seedPhrases,
+      phrasesUpdatedAt: parsed.phrasesUpdatedAt ?? 0,
     };
   } catch {
     return DEFAULT_STATE;

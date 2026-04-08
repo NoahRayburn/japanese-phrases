@@ -39,4 +39,7 @@ export interface AppState {
   reviews: Record<string, ReviewRecord>;
   settings: AppSettings;
   phrases: PhraseCard[];
+  // ms epoch of the most recent local phrase mutation. Used for conflict
+  // resolution against the remote Firestore document on load.
+  phrasesUpdatedAt: number;
 }

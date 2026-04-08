@@ -53,17 +53,19 @@ function toValue(v) {
 
 const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jp-learner/phrases?key=${apiKey}`;
 
+const now = Date.now();
 const body = {
   fields: {
     phrases: toValue(phrases),
-    updatedAt: { timestampValue: new Date().toISOString() },
+    updatedAt: { timestampValue: new Date(now).toISOString() },
+    localUpdatedAt: { integerValue: String(now) },
   },
 };
 
 // Use updateMask so the PATCH replaces only these fields (and replaces them
 // fully — without an updateMask, REST treats the request as a merge against
 // the existing document's field set).
-const urlWithMask = `${url}&updateMask.fieldPaths=phrases&updateMask.fieldPaths=updatedAt`;
+const urlWithMask = `${url}&updateMask.fieldPaths=phrases&updateMask.fieldPaths=updatedAt&updateMask.fieldPaths=localUpdatedAt`;
 
 console.log(`Pushing ${phrases.length} phrases to Firestore via REST…`);
 const res = await fetch(urlWithMask, {

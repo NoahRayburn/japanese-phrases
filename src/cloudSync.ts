@@ -11,6 +11,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  Timestamp,
   type Firestore,
 } from "firebase/firestore";
 import type { PhraseCard } from "./types";
@@ -76,6 +77,17 @@ const DOC_ID = "phrases";
 export interface RemoteSnapshot {
   exists: boolean;
   phrases: PhraseCard[];
+  /** ms epoch — 0 if the doc doesn't exist yet or has no timestamp. */
+  updatedAt: number;
+}
+
+function extractUpdatedAt(raw: unknown): number {
+  if (!raw) return 0;
+  if (raw instanceof Timestamp) return raw.toMillis();
+  // Server-assigned timestamps appear as plain objects on the initial client
+  // write before the server round-trip; fall back to 0 so we don't clobber
+  // the local value.
+  return 0;
 }
 
 export function subscribePhrases(
@@ -89,9 +101,20 @@ export function subscribePhrases(
       setStatus("synced");
       const data = snap.data();
       if (snap.exists() && data && Array.isArray(data.phrases)) {
-        onChange({ exists: true, phrases: data.phrases as PhraseCard[] });
+        // Prefer the client-provided `localUpdatedAt` number (immediately
+        // available on the originating device's snapshot) and fall back to
+        // Firestore's server timestamp for older documents.
+        const updatedAt =
+          typeof data.localUpdatedAt === "number"
+            ? data.localUpdatedAt
+            : extractUpdatedAt(data.updatedAt);
+        onChange({
+          exists: true,
+          phrases: data.phrases as PhraseCard[],
+          updatedAt,
+        });
       } else {
-        onChange({ exists: false, phrases: [] });
+        onChange({ exists: false, phrases: [], updatedAt: 0 });
       }
     },
     (err) => {
@@ -101,25 +124,24 @@ export function subscribePhrases(
   );
 }
 
-let pushTimer: ReturnType<typeof setTimeout> | null = null;
-let pendingPush: PhraseCard[] | null = null;
-
-export function pushPhrases(phrases: PhraseCard[]): void {
+/**
+ * Push phrases immediately (no debounce). The local `updatedAt` ms epoch is
+ * stored alongside the array so the receiving client knows the ordering even
+ * before Firestore's serverTimestamp round-trips.
+ */
+export async function pushPhrases(
+  phrases: PhraseCard[],
+  localUpdatedAt: number
+): Promise<void> {
   if (!ensureInit() || !db) return;
-  pendingPush = phrases;
-  if (pushTimer) clearTimeout(pushTimer);
-  pushTimer = setTimeout(async () => {
-    if (!db || !pendingPush) return;
-    const payload = pendingPush;
-    pendingPush = null;
-    try {
-      await setDoc(doc(db, COLLECTION, DOC_ID), {
-        phrases: payload,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (e) {
-      console.error("Firestore push error", e);
-      setStatus("error");
-    }
-  }, 600);
+  try {
+    await setDoc(doc(db, COLLECTION, DOC_ID), {
+      phrases,
+      updatedAt: serverTimestamp(),
+      localUpdatedAt,
+    });
+  } catch (e) {
+    console.error("Firestore push error", e);
+    setStatus("error");
+  }
 }

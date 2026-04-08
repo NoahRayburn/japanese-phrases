@@ -42,15 +42,29 @@ export default function App() {
   useEffect(() => {
     const unsubStatus = onSyncStatus(setSyncStatus);
     const unsubPhrases = subscribePhrases((snap) => {
-      if (snap.exists) {
-        // Remote has data — adopt it locally.
-        isRemoteUpdate.current = true;
-        setState((s) => ({ ...s, phrases: snap.phrases }));
-      } else {
-        // Remote is empty (first run on this Firestore project) —
-        // seed it from local.
-        pushPhrases(stateRef.current.phrases);
+      const localUpdatedAt = stateRef.current.phrasesUpdatedAt;
+
+      if (!snap.exists) {
+        // Remote is empty — seed it from local.
+        pushPhrases(stateRef.current.phrases, localUpdatedAt || Date.now());
+        return;
       }
+
+      // Conflict resolution: if local has newer edits than what's in the
+      // cloud (e.g. the user edited while offline, or the previous push
+      // was lost), push local up instead of overwriting with stale remote.
+      if (localUpdatedAt > snap.updatedAt) {
+        pushPhrases(stateRef.current.phrases, localUpdatedAt);
+        return;
+      }
+
+      // Remote is newer (or equal) — adopt it locally.
+      isRemoteUpdate.current = true;
+      setState((s) => ({
+        ...s,
+        phrases: snap.phrases,
+        phrasesUpdatedAt: snap.updatedAt,
+      }));
     });
     return () => {
       unsubStatus();
@@ -64,8 +78,9 @@ export default function App() {
       isRemoteUpdate.current = false;
       return;
     }
-    pushPhrases(state.phrases);
-  }, [state.phrases]);
+    if (state.phrasesUpdatedAt === 0) return; // never edited locally
+    pushPhrases(state.phrases, state.phrasesUpdatedAt);
+  }, [state.phrases, state.phrasesUpdatedAt]);
 
   const handleGrade = useCallback(
     (cardId: string, mode: Mode, correct: boolean) => {
@@ -79,11 +94,18 @@ export default function App() {
   }, []);
 
   const handlePhrasesChange = useCallback((phrases: PhraseCard[]) => {
-    setState((s) => ({ ...s, phrases }));
+    setState((s) => ({
+      ...s,
+      phrases,
+      phrasesUpdatedAt: Date.now(),
+    }));
   }, []);
 
   const handleResetPhrases = useCallback(() => {
-    setState((s) => resetPhrases(s));
+    setState((s) => ({
+      ...resetPhrases(s),
+      phrasesUpdatedAt: Date.now(),
+    }));
   }, []);
 
   // Keyboard shortcuts: 1/2/3/4/5 to switch tabs.
