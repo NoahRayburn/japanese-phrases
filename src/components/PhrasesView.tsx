@@ -8,10 +8,9 @@ interface Props {
   onResetDefaults: () => void;
 }
 
-const ALL_MODES: Mode[] = ["say", "hear", "read"];
-const MODE_LABEL: Record<Mode, string> = {
-  say: "Say",
-  hear: "Hear",
+const ALL_MODES: Mode[] = ["say", "read"];
+const MODE_LABEL: Record<string, string> = {
+  say: "Say / Hear",
   read: "Read",
 };
 
@@ -21,8 +20,8 @@ export function PhrasesView({ phrases, onChange, onResetDefaults }: Props) {
   const [editing, setEditing] = useState<PhraseCard | null>(null);
   const [adding, setAdding] = useState(false);
 
-  // Show only cards that include the active mode.
-  const inMode = phrases.filter((c) => c.modes.includes(mode));
+  // Show only cards that include the active mode. Treat hear cards as say cards to show migration mapping.
+  const inMode = phrases.filter((c) => c.modes.includes(mode) || (mode === "say" && c.modes.includes("hear")));
 
   const filtered = inMode.filter((c) => {
     if (!search) return true;
@@ -82,9 +81,8 @@ export function PhrasesView({ phrases, onChange, onResetDefaults }: Props) {
     onResetDefaults();
   };
 
-  const counts: Record<Mode, number> = {
-    say: phrases.filter((c) => c.modes.includes("say")).length,
-    hear: phrases.filter((c) => c.modes.includes("hear")).length,
+  const counts: Record<string, number> = {
+    say: phrases.filter((c) => c.modes.includes("say") || c.modes.includes("hear")).length,
     read: phrases.filter((c) => c.modes.includes("read")).length,
   };
 
@@ -157,8 +155,9 @@ export function PhrasesView({ phrases, onChange, onResetDefaults }: Props) {
                   {card.romaji}
                   {card.modes.length > 1 &&
                     ` · also in ${card.modes
-                      .filter((m) => m !== mode)
+                      .filter((m) => m !== mode && m !== "hear")
                       .map((m) => MODE_LABEL[m])
+                      .filter(Boolean)
                       .join(", ")}`}
                 </p>
               )}

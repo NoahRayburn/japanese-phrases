@@ -22,7 +22,8 @@ export function daysUntil(tripDate: string): number {
 }
 
 export function cardsForMode(phrases: PhraseCard[], mode: Mode) {
-  return phrases.filter((c) => c.modes.includes(mode));
+  const targetMode = mode === "hear" ? "say" : mode;
+  return phrases.filter((c) => c.modes.includes(targetMode));
 }
 
 // Mode-scoped helpers — review history is filtered to entries for that mode.

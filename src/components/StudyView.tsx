@@ -20,11 +20,13 @@ export function StudyView({ mode, state, onGrade }: Props) {
   const [started, setStarted] = useState(false);
 
   // Build the deck whenever mode or filter changes.
+  // Hear mode reuses the Say pool — same phrases, reversed direction.
   useEffect(() => {
+    const poolMode: Mode = mode === "hear" ? "say" : mode;
     const pool =
       filter === "weak"
-        ? weakCardsForMode(state, mode)
-        : cardsForMode(state.phrases, mode);
+        ? weakCardsForMode(state, poolMode)
+        : cardsForMode(state.phrases, poolMode);
     setDeck(shuffle(pool));
     setIndex(0);
     setSessionStats({ right: 0, wrong: 0 });
